@@ -281,7 +281,7 @@ export function TrainingsScreen() {
       
       if (rosterError) throw rosterError
 
-      // Get existing attendance for this session
+      // Get existing attendance for this session - map by fincode
       const { data: attendanceData, error: attendanceError } = await supabase
         .from('attendance')
         .select('fincode, status_code')
