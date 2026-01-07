@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native'
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, TextInput, Image } from 'react-native'
 import { useSeason } from '../contexts/SeasonContext'
 import { supabase } from '../lib/supabase'
 
@@ -19,6 +19,17 @@ export function AthletesScreen() {
   const [searchQuery, setSearchQuery] = useState('')
   const [groups, setGroups] = useState<{ id: number; group_name: string }[]>([])
   const [filterGroup, setFilterGroup] = useState<number | null>(null)
+  const [imageErrors, setImageErrors] = useState<Set<number>>(new Set())
+
+  // Helper function to generate Supabase storage URL for athlete portraits
+  const getPortraitUrl = (fincode: number): string => {
+    return `https://rxwlwfhytiwzvntpwlyj.supabase.co/storage/v1/object/public/PortraitPics/${fincode}.jpg`
+  }
+
+  // Handle image load errors
+  const handleImageError = (fincode: number) => {
+    setImageErrors(prev => new Set(prev).add(fincode))
+  }
 
   useEffect(() => {
     loadGroups()
@@ -91,9 +102,8 @@ export function AthletesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Athletes</Text>
         <Text style={styles.subtitle}>
-          {selectedSeason?.season_name || 'Select a season'}
+          {selectedSeason?.season_name || 'Select a season in Settings'}
         </Text>
       </View>
 
@@ -110,14 +120,6 @@ export function AthletesScreen() {
       {/* Group Filter */}
       <View style={styles.filterContainer}>
         <ScrollView horizontal={true} showsHorizontalScrollIndicator={false}>
-          <TouchableOpacity
-            style={[styles.filterButton, filterGroup === null && styles.filterButtonActive]}
-            onPress={() => setFilterGroup(null)}
-          >
-            <Text style={[styles.filterButtonText, filterGroup === null && styles.filterButtonTextActive]}>
-              All Groups
-            </Text>
-          </TouchableOpacity>
           {groups.map(group => (
             <TouchableOpacity
               key={group.id}
@@ -139,21 +141,60 @@ export function AthletesScreen() {
             <Text style={styles.emptyText}>No athletes found</Text>
           </View>
         ) : (
-          filteredAthletes.map(athlete => (
-            <View key={athlete.fincode} style={styles.athleteCard}>
-              <View style={styles.athleteInfo}>
-                <Text style={styles.athleteName}>
-                  {athlete.firstname} {athlete.lastname}
-                </Text>
-                <Text style={styles.athleteDetails}>
-                  {athlete.gender} • {calculateAge(athlete.birthdate)} years old
-                </Text>
-                {athlete.group_name && (
-                  <Text style={styles.athleteGroup}>{athlete.group_name}</Text>
+          filteredAthletes.map(athlete => {
+            const shouldLoadImage = !imageErrors.has(athlete.fincode)
+            const photoUrl = getPortraitUrl(athlete.fincode)
+            
+            return (
+              <View key={athlete.fincode} style={styles.athleteCard}>
+                <View style={styles.athleteInfo}>
+                  <Text style={styles.athleteName}>
+                    {athlete.firstname} {athlete.lastname}
+                  </Text>
+                  <Text style={styles.athleteDetails}>
+                    {athlete.gender} • {calculateAge(athlete.birthdate)} years old
+                  </Text>
+                  {athlete.group_name && (
+                    <Text style={styles.athleteGroup}>{athlete.group_name}</Text>
+                  )}
+                </View>
+                {shouldLoadImage ? (
+                  <Image
+                    source={{ uri: photoUrl }}
+                    style={styles.athletePortrait}
+                    onError={(error: any) => {
+                      const errorMsg = error.nativeEvent?.error || ''
+                      if (
+                        errorMsg.includes('404') ||
+                        errorMsg.includes('Not Found') ||
+                        errorMsg.includes('400') ||
+                        errorMsg.includes('Bad Request') ||
+                        errorMsg.includes('Unexpected HTTP code')
+                      ) {
+                        console.log(
+                          `Portrait not found in Supabase storage for athlete ${athlete.firstname} ${athlete.lastname} (fincode: ${athlete.fincode}). Using default avatar.`
+                        )
+                      } else {
+                        console.error(
+                          `Failed to load portrait for athlete ${athlete.firstname} ${athlete.lastname}:`,
+                          'URL:',
+                          photoUrl,
+                          'Error:',
+                          error.nativeEvent
+                        )
+                      }
+                      handleImageError(athlete.fincode)
+                    }}
+                  />
+                ) : (
+                  <Image
+                    source={require('../assets/images/avatar.jpg')}
+                    style={styles.athletePortrait}
+                  />
                 )}
               </View>
-            </View>
-          ))
+            )
+          })
         )}
       </ScrollView>
     </View>
@@ -245,6 +286,8 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
   },
   athleteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
@@ -273,5 +316,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#0284c7',
     fontWeight: '600',
+  },
+  athletePortrait: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginLeft: 16,
+  },
+  athletePortraitPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginLeft: 16,
+    backgroundColor: '#0284c7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  athletePortraitInitials: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
   },
 })

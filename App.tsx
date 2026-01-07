@@ -6,6 +6,7 @@ import { ToolsScreen } from './screens/ToolsScreen'
 import { AthletesScreen } from './screens/AthletesScreen'
 import { RacesScreen } from './screens/RacesScreen'
 import { TrainingsScreen } from './screens/TrainingsScreen'
+import { SettingsScreen } from './screens/SettingsScreen'
 import { View, Text, StyleSheet } from 'react-native'
 
 const Tab = createBottomTabNavigator()
@@ -15,14 +16,6 @@ function HomeScreen() {
   return (
     <View style={styles.placeholder}>
       <Text style={styles.placeholderText}>Home Screen</Text>
-    </View>
-  )
-}
-
-function SettingsScreen() {
-  return (
-    <View style={styles.placeholder}>
-      <Text style={styles.placeholderText}>Settings Screen</Text>
     </View>
   )
 }

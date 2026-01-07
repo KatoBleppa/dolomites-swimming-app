@@ -15,7 +15,7 @@ export function RacesScreen() {
   const { selectedSeason } = useSeason()
   const [races, setRaces] = useState<Race[]>([])
   const [loading, setLoading] = useState(true)
-  const [filterType, setFilterType] = useState<string>('all')
+  const [filterType, setFilterType] = useState<number | null>(null)
 
   useEffect(() => {
     if (selectedSeason) {
@@ -35,10 +35,8 @@ export function RacesScreen() {
         .lte('max_date', selectedSeason.season_end)
         .order('min_date', { ascending: false })
 
-      if (filterType === '25') {
-        query = query.eq('meet_course', 25)
-      } else if (filterType === '50') {
-        query = query.eq('meet_course', 50)
+      if (filterType !== null) {
+        query = query.eq('meet_course', filterType)
       }
 
       const { data, error } = await query
@@ -83,26 +81,38 @@ export function RacesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Races</Text>
         <Text style={styles.subtitle}>
-          {selectedSeason?.season_name || 'Select a season'}
+          {selectedSeason?.season_name || 'Select a season in Settings'}
         </Text>
       </View>
 
       {/* Type Filter */}
       <View style={styles.filterContainer}>
         <ScrollView horizontal={true} showsHorizontalScrollIndicator={false}>
-          {[{value: 'all', label: 'All Meets'}, {value: '25', label: 'Short Course (25m)'}, {value: '50', label: 'Long Course (50m)'}].map(type => (
-            <TouchableOpacity
-              key={type.value}
-              style={[styles.filterButton, filterType === type.value && styles.filterButtonActive]}
-              onPress={() => setFilterType(type.value)}
-            >
-              <Text style={[styles.filterButtonText, filterType === type.value && styles.filterButtonTextActive]}>
-                {type.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          <TouchableOpacity
+            style={[styles.filterButton, filterType === null && styles.filterButtonActive]}
+            onPress={() => setFilterType(null)}
+          >
+            <Text style={[styles.filterButtonText, filterType === null && styles.filterButtonTextActive]}>
+              All
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterButton, filterType === 2 && styles.filterButtonActive]}
+            onPress={() => setFilterType(2)}
+          >
+            <Text style={[styles.filterButtonText, filterType === 2 && styles.filterButtonTextActive]}>
+              SC (25m)
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterButton, filterType === 1 && styles.filterButtonActive]}
+            onPress={() => setFilterType(1)}
+          >
+            <Text style={[styles.filterButtonText, filterType === 1 && styles.filterButtonTextActive]}>
+              LC (50m)
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
 
@@ -118,7 +128,7 @@ export function RacesScreen() {
               <View style={styles.raceHeader}>
                 <Text style={styles.raceName}>{race.meet_name}</Text>
                 <View style={styles.raceTypeBadge}>
-                  <Text style={styles.raceTypeText}>{race.meet_course === 25 ? 'SC' : 'LC'}</Text>
+                  <Text style={styles.raceTypeText}>{race.meet_course === 2 ? 'SC' : 'LC'}</Text>
                 </View>
               </View>
               <View style={styles.raceDetails}>

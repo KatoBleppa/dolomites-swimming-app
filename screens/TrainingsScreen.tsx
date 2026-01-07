@@ -13,6 +13,7 @@ interface Training {
   volume?: number
   description?: string
   location?: string
+  pool_name?: string
   sess_group_id?: number
 }
 
@@ -49,15 +50,23 @@ export function TrainingsScreen() {
     sess_group_id: 0,
     volume: '',
     location: '',
+    pool_name: '',
     description: ''
   })
 
   useEffect(() => {
     if (selectedSeason) {
-      fetchTrainings()
+      // Reset to current week within the selected season
+      goToCurrentWeek()
       loadGroups()
     }
-  }, [selectedSeason, currentWeekStart])
+  }, [selectedSeason])
+
+  useEffect(() => {
+    if (selectedSeason) {
+      fetchTrainings()
+    }
+  }, [currentWeekStart])
 
   function getMonday(date: Date): Date {
     const d = new Date(date)
@@ -88,8 +97,34 @@ export function TrainingsScreen() {
     setCurrentWeekStart(newDate)
   }
 
+  function getFirstMondayOfSeptember(year: number): Date {
+    // Start with September 1st of the given year
+    const sept1 = new Date(year, 8, 1) // Month is 0-indexed, so 8 = September
+    const day = sept1.getDay()
+    
+    // If Sept 1 is Monday (1), use it. Otherwise, find the next Monday
+    const daysUntilMonday = day === 0 ? 1 : (8 - day) % 7
+    const firstMonday = new Date(year, 8, 1 + daysUntilMonday)
+    
+    return firstMonday
+  }
+
   function goToCurrentWeek() {
-    setCurrentWeekStart(getMonday(new Date()))
+    if (!selectedSeason) return
+    
+    const today = new Date()
+    const seasonStart = new Date(selectedSeason.season_start)
+    const seasonEnd = new Date(selectedSeason.season_end)
+    
+    // If today is within the season, show current week
+    if (today >= seasonStart && today <= seasonEnd) {
+      setCurrentWeekStart(getMonday(today))
+    } else {
+      // If season is not current, show first Monday of September
+      const seasonYear = seasonStart.getFullYear()
+      const firstSeptMonday = getFirstMondayOfSeptember(seasonYear)
+      setCurrentWeekStart(firstSeptMonday)
+    }
   }
 
   async function onRefresh() {
@@ -106,6 +141,15 @@ export function TrainingsScreen() {
       const weekEnd = new Date(currentWeekStart)
       weekEnd.setDate(weekEnd.getDate() + 6)
 
+      // Filter sessions to be within the selected season
+      const seasonStart = new Date(selectedSeason.season_start)
+      const seasonEnd = new Date(selectedSeason.season_end)
+      
+      // Use the later of week start or season start
+      const queryStartDate = currentWeekStart > seasonStart ? currentWeekStart : seasonStart
+      // Use the earlier of week end or season end
+      const queryEndDate = weekEnd < seasonEnd ? weekEnd : seasonEnd
+
       const query = supabase
         .from('sessions')
         .select(`
@@ -116,13 +160,14 @@ export function TrainingsScreen() {
           volume,
           description,
           location,
+          pool_name,
           sess_group_id,
           _groups!sessions_sess_group_id_fkey (
             group_name
           )
         `)
-        .gte('date', currentWeekStart.toISOString().split('T')[0])
-        .lte('date', weekEnd.toISOString().split('T')[0])
+        .gte('date', queryStartDate.toISOString().split('T')[0])
+        .lte('date', queryEndDate.toISOString().split('T')[0])
         .order('date', { ascending: true })
         .order('time', { ascending: true })
 
@@ -139,6 +184,7 @@ export function TrainingsScreen() {
         volume: session.volume,
         description: session.description,
         location: session.location,
+        pool_name: session.pool_name,
         group_name: session._groups?.group_name || 'Unknown',
         sess_group_id: session.sess_group_id
       }))
@@ -174,6 +220,7 @@ export function TrainingsScreen() {
       sess_group_id: groups[0]?.id || 0,
       volume: '',
       location: '',
+      pool_name: '',
       description: ''
     })
     setFormModalVisible(true)
@@ -189,6 +236,7 @@ export function TrainingsScreen() {
       sess_group_id: selectedSession.sess_group_id || 0,
       volume: selectedSession.volume?.toString() || '',
       location: selectedSession.location || '',
+      pool_name: selectedSession.pool_name || '',
       description: selectedSession.description || ''
     })
     setModalVisible(false)
@@ -204,6 +252,7 @@ export function TrainingsScreen() {
         sess_group_id: formData.sess_group_id || null,
         volume: formData.volume ? parseInt(formData.volume) : null,
         location: formData.location || null,
+        pool_name: formData.pool_name || null,
         description: formData.description || null
       }
 
@@ -392,6 +441,13 @@ export function TrainingsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.subtitle}>
+          {selectedSeason?.season_name || 'Select a season in Settings'}
+        </Text>
+      </View>
+
       {/* Week Navigation */}
       <View style={styles.navigationContainer}>
         <TouchableOpacity onPress={goToPreviousWeek} style={styles.navButton}>
@@ -505,7 +561,7 @@ export function TrainingsScreen() {
                     <View style={styles.modalRow}>
                       <MaterialCommunityIcons name="clock-outline" size={20} color="#666" />
                       <Text style={styles.modalLabel}>Time:</Text>
-                      <Text style={styles.modalValue}>{String(selectedSession.time)}</Text>
+                      <Text style={styles.modalValue}>{String(selectedSession.time).substring(0, 5)}</Text>
                     </View>
                   )}
 
@@ -551,7 +607,7 @@ export function TrainingsScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteSession}>
                       <MaterialCommunityIcons name="delete" size={20} color="#fff" />
-                      <Text style={styles.deleteButtonText}>Delete</Text>
+                      <Text style={styles.deleteButtonText}>Del</Text>
                     </TouchableOpacity>
                   </View>
                 </ScrollView>
@@ -578,28 +634,28 @@ export function TrainingsScreen() {
             </View>
             
             <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={true}>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Date</Text>
+              <View style={styles.formGroupRow}>
+                <Text style={styles.formLabelRow}>Date</Text>
                 <TextInput
-                  style={styles.input}
+                  style={styles.inputRow}
                   value={formData.date}
                   onChangeText={(text) => setFormData({...formData, date: text})}
                   placeholder="YYYY-MM-DD"
                 />
               </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Time</Text>
+              <View style={styles.formGroupRow}>
+                <Text style={styles.formLabelRow}>Time</Text>
                 <TextInput
-                  style={styles.input}
+                  style={styles.inputRow}
                   value={formData.time}
                   onChangeText={(text) => setFormData({...formData, time: text})}
                   placeholder="HH:MM"
                 />
               </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Type</Text>
+              <View style={styles.formGroupRow}>
+                <Text style={styles.formLabelRow}>Type</Text>
                 <View style={styles.typeButtons}>
                   <TouchableOpacity
                     style={[styles.typeButton, formData.type === 'Swim' && styles.typeButtonActive]}
@@ -616,8 +672,8 @@ export function TrainingsScreen() {
                 </View>
               </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Group</Text>
+              <View style={styles.formGroupRow}>
+                <Text style={styles.formLabelRow}>Group</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.groupScroll}>
                   {groups.map(group => (
                     <TouchableOpacity
@@ -633,10 +689,10 @@ export function TrainingsScreen() {
                 </ScrollView>
               </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Volume (meters)</Text>
+              <View style={styles.formGroupRow}>
+                <Text style={styles.formLabelRow}>Volume</Text>
                 <TextInput
-                  style={styles.input}
+                  style={styles.inputRow}
                   value={formData.volume}
                   onChangeText={(text) => setFormData({...formData, volume: text})}
                   placeholder="e.g., 3000"
@@ -644,13 +700,23 @@ export function TrainingsScreen() {
                 />
               </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Location</Text>
+              <View style={styles.formGroupRow}>
+                <Text style={styles.formLabelRow}>Loc</Text>
                 <TextInput
-                  style={styles.input}
+                  style={styles.inputRow}
                   value={formData.location}
                   onChangeText={(text) => setFormData({...formData, location: text})}
-                  placeholder="Pool or gym location"
+                  placeholder="Pool/gym"
+                />
+              </View>
+
+              <View style={styles.formGroupRow}>
+                <Text style={styles.formLabelRow}>Pool</Text>
+                <TextInput
+                  style={styles.inputRow}
+                  value={formData.pool_name}
+                  onChangeText={(text) => setFormData({...formData, pool_name: text})}
+                  placeholder="Pool name"
                 />
               </View>
 
@@ -662,7 +728,6 @@ export function TrainingsScreen() {
                   onChangeText={(text) => setFormData({...formData, description: text})}
                   placeholder="Session notes..."
                   multiline
-                  numberOfLines={4}
                 />
               </View>
 
@@ -776,6 +841,22 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#64748b',
+  },
+  header: {
+    padding: 20,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    marginTop: 4,
   },
   navigationContainer: {
     flexDirection: 'row',
@@ -1025,11 +1106,32 @@ const styles = StyleSheet.create({
   formGroup: {
     marginBottom: 20,
   },
+  formGroupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   formLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: '#475569',
     marginBottom: 8,
+  },
+  formLabelRow: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+    width: 70,
+  },
+  inputRow: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#1e293b',
+    backgroundColor: '#fff',
   },
   input: {
     borderWidth: 1,
@@ -1041,10 +1143,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   textArea: {
-    height: 150,
+    minHeight: 80,
     textAlignVertical: 'top',
+    backgroundColor: '#f3f4f6',
   },
   typeButtons: {
+    flex: 1,
     flexDirection: 'row',
     gap: 12,
   },
@@ -1070,6 +1174,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   groupScroll: {
+    flex: 1,
     flexDirection: 'row',
   },
   groupButton: {
