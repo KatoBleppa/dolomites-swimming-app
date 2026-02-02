@@ -501,16 +501,16 @@ export function TrainingsScreen() {
                         size={24}
                         color="#fff"
                       />
-                      {session.time && (
+                      {session.time ? (
                         <Text style={styles.sessionTime} numberOfLines={1}>
                           {String(session.time).substring(0, 5)}
                         </Text>
-                      )}
-                      {session.group_name && (
+                      ) : null}
+                      {session.group_name ? (
                         <Text style={styles.sessionGroup} numberOfLines={1}>
                           {session.group_name}
                         </Text>
-                      )}
+                      ) : null}
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -557,44 +557,44 @@ export function TrainingsScreen() {
                     <Text style={styles.modalValue}>{formatDate(selectedSession.date)}</Text>
                   </View>
 
-                  {selectedSession.time && (
+                  {selectedSession.time ? (
                     <View style={styles.modalRow}>
                       <MaterialCommunityIcons name="clock-outline" size={20} color="#666" />
                       <Text style={styles.modalLabel}>Time:</Text>
                       <Text style={styles.modalValue}>{String(selectedSession.time).substring(0, 5)}</Text>
                     </View>
-                  )}
+                  ) : null}
 
-                  {selectedSession.group_name && (
+                  {selectedSession.group_name ? (
                     <View style={styles.modalRow}>
                       <MaterialCommunityIcons name="account-group" size={20} color="#666" />
                       <Text style={styles.modalLabel}>Group:</Text>
                       <Text style={styles.modalValue}>{selectedSession.group_name}</Text>
                     </View>
-                  )}
+                  ) : null}
 
-                  {selectedSession.volume && (
+                  {selectedSession.volume !== null && selectedSession.volume !== undefined ? (
                     <View style={styles.modalRow}>
                       <MaterialCommunityIcons name="gauge" size={20} color="#666" />
                       <Text style={styles.modalLabel}>Volume:</Text>
                       <Text style={styles.modalValue}>{selectedSession.volume}m</Text>
                     </View>
-                  )}
+                  ) : null}
 
-                  {selectedSession.location && (
+                  {selectedSession.location ? (
                     <View style={styles.modalRow}>
                       <MaterialCommunityIcons name="map-marker" size={20} color="#666" />
                       <Text style={styles.modalLabel}>Location:</Text>
                       <Text style={styles.modalValue}>{selectedSession.location}</Text>
                     </View>
-                  )}
+                  ) : null}
 
-                  {selectedSession.description && (
+                  {selectedSession.description ? (
                     <View style={styles.modalDescriptionContainer}>
                       <Text style={styles.modalLabel}>Description:</Text>
                       <Text style={styles.modalDescription}>{selectedSession.description}</Text>
                     </View>
-                  )}
+                  ) : null}
 
                   <View style={styles.modalActions}>
                     <TouchableOpacity style={styles.attendanceButton} onPress={openAttendanceModal}>

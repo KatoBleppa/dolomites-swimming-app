@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, TextInput, Image } from 'react-native'
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, TextInput, Image, Modal, Pressable } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { useSeason } from '../contexts/SeasonContext'
-import { supabase } from '../lib/supabase'
+import { supabase, supabaseUrl } from '../lib/supabase'
 
 interface Athlete {
   fincode: number
@@ -10,6 +11,8 @@ interface Athlete {
   birthdate: string
   gender: string
   group_name?: string
+  email?: string
+  phone?: string
 }
 
 export function AthletesScreen() {
@@ -20,10 +23,11 @@ export function AthletesScreen() {
   const [groups, setGroups] = useState<{ id: number; group_name: string }[]>([])
   const [filterGroup, setFilterGroup] = useState<number | null>(null)
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set())
+  const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null)
 
   // Helper function to generate Supabase storage URL for athlete portraits
   const getPortraitUrl = (fincode: number): string => {
-    return `https://rxwlwfhytiwzvntpwlyj.supabase.co/storage/v1/object/public/PortraitPics/${fincode}.jpg`
+    return `${supabaseUrl}/storage/v1/object/public/PortraitPics/${fincode}.jpg`
   }
 
   // Handle image load errors
@@ -76,19 +80,11 @@ export function AthletesScreen() {
 
   const filteredAthletes = athletes.filter(athlete => {
     const fullName = `${athlete.firstname} ${athlete.lastname}`.toLowerCase()
-    return fullName.includes(searchQuery.toLowerCase())
+    const email = (athlete.email || '').toLowerCase()
+    const phone = (athlete.phone || '').toLowerCase()
+    const query = searchQuery.toLowerCase()
+    return fullName.includes(query) || email.includes(query) || phone.includes(query)
   })
-
-  const calculateAge = (birthdate: string) => {
-    const birth = new Date(birthdate)
-    const today = new Date()
-    let age = today.getFullYear() - birth.getFullYear()
-    const monthDiff = today.getMonth() - birth.getMonth()
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      age--
-    }
-    return age
-  }
 
   if (loading) {
     return (
@@ -105,16 +101,6 @@ export function AthletesScreen() {
         <Text style={styles.subtitle}>
           {selectedSeason?.season_name || 'Select a season in Settings'}
         </Text>
-      </View>
-
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search athletes..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
       </View>
 
       {/* Group Filter */}
@@ -146,17 +132,37 @@ export function AthletesScreen() {
             const photoUrl = getPortraitUrl(athlete.fincode)
             
             return (
-              <View key={athlete.fincode} style={styles.athleteCard}>
+              <TouchableOpacity
+                key={athlete.fincode}
+                style={styles.athleteCard}
+                onPress={() => setSelectedAthlete(athlete)}
+                activeOpacity={0.85}
+              >
                 <View style={styles.athleteInfo}>
-                  <Text style={styles.athleteName}>
-                    {athlete.firstname} {athlete.lastname}
-                  </Text>
-                  <Text style={styles.athleteDetails}>
-                    {athlete.gender} • {calculateAge(athlete.birthdate)} years old
-                  </Text>
-                  {athlete.group_name && (
-                    <Text style={styles.athleteGroup}>{athlete.group_name}</Text>
-                  )}
+                  <View style={styles.athleteNameRow}>
+                    <Text style={styles.athleteName}>
+                      {athlete.firstname} {athlete.lastname}
+                    </Text>
+                    <Ionicons
+                      name={athlete.gender === 'M' ? 'male' : 'female'}
+                      size={18}
+                      color={athlete.gender === 'M' ? '#2563eb' : '#db2777'}
+                      style={styles.genderIcon}
+                    />
+                  </View>
+                  {athlete.email ? (
+                    <View style={styles.athleteContactRow}>
+                      <Ionicons name="mail" size={16} color="#64748b" style={styles.contactIcon} />
+                      <Text style={styles.athleteContact}>{athlete.email}</Text>
+                    </View>
+                  ) : null}
+                  {athlete.phone ? (
+                    <View style={styles.athleteContactRow}>
+                      <Ionicons name="call" size={16} color="#64748b" style={styles.contactIcon} />
+                      <Text style={styles.athleteContact}>{athlete.phone}</Text>
+                    </View>
+                  ) : null}
+
                 </View>
                 {shouldLoadImage ? (
                   <Image
@@ -192,11 +198,74 @@ export function AthletesScreen() {
                     style={styles.athletePortrait}
                   />
                 )}
-              </View>
+              </TouchableOpacity>
             )
           })
         )}
       </ScrollView>
+
+      <Modal
+        visible={selectedAthlete !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setSelectedAthlete(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setSelectedAthlete(null)}>
+          <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
+            {selectedAthlete && (
+              <>
+                <View style={styles.modalHeader}>
+                  <View style={styles.modalHeaderLeft}>
+                    {imageErrors.has(selectedAthlete.fincode) ? (
+                      <Image
+                        source={require('../assets/images/avatar.jpg')}
+                        style={styles.modalPortrait}
+                      />
+                    ) : (
+                      <Image
+                        source={{ uri: getPortraitUrl(selectedAthlete.fincode) }}
+                        style={styles.modalPortrait}
+                        onError={() => handleImageError(selectedAthlete.fincode)}
+                      />
+                    )}
+                    <View style={styles.modalTitleBlock}>
+                      <Text style={styles.modalTitle}>
+                        {selectedAthlete.firstname} {selectedAthlete.lastname}
+                      </Text>
+                      <Text style={styles.modalSubtitle}>FIN Code: {selectedAthlete.fincode}</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity onPress={() => setSelectedAthlete(null)}>
+                    <Text style={styles.modalClose}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.modalBody}>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Gender</Text>
+                    <Text style={styles.modalValue}>
+                      {selectedAthlete.gender === 'M' ? 'Male' : 'Female'}
+                    </Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Birth Date</Text>
+                    <Text style={styles.modalValue}>
+                      {new Date(selectedAthlete.birthdate).toLocaleDateString()}
+                    </Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Email</Text>
+                    <Text style={styles.modalValue}>{selectedAthlete.email || 'N/A'}</Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Phone</Text>
+                    <Text style={styles.modalValue}>{selectedAthlete.phone || 'N/A'}</Text>
+                  </View>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   )
 }
@@ -301,16 +370,37 @@ const styles = StyleSheet.create({
   athleteInfo: {
     flex: 1,
   },
+  athleteNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   athleteName: {
     fontSize: 18,
     fontWeight: '700',
     color: '#1e293b',
     marginBottom: 4,
   },
+  genderIcon: {
+    marginBottom: 4,
+  },
   athleteDetails: {
     fontSize: 14,
     color: '#64748b',
     marginBottom: 4,
+  },
+  athleteContactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  contactIcon: {
+    marginTop: 1,
+  },
+  athleteContact: {
+    fontSize: 13,
+    color: '#64748b',
   },
   athleteGroup: {
     fontSize: 12,
@@ -322,6 +412,72 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     marginLeft: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  modalPortrait: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    marginRight: 12,
+  },
+  modalTitleBlock: {
+    flex: 1,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    marginTop: 4,
+  },
+  modalClose: {
+    fontSize: 20,
+    color: '#64748b',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  modalBody: {
+    gap: 10,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalLabel: {
+    fontSize: 14,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  modalValue: {
+    fontSize: 14,
+    color: '#1e293b',
   },
   athletePortraitPlaceholder: {
     width: 60,
