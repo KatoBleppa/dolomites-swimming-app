@@ -142,16 +142,19 @@ export function RacesScreen() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedMeet, setSelectedMeet] = useState<Meet | null>(null)
   const [viewingResults, setViewingResults] = useState(false)
+  const [viewingEntries, setViewingEntries] = useState(false)
   const [events, setEvents] = useState<EventWithRace[]>([])
   const [results, setResults] = useState<ResultWithAthlete[]>([])
   const [relayResults, setRelayResults] = useState<RelayResultWithEvent[]>([])
+  const [entryEvents, setEntryEvents] = useState<EventWithRace[]>([])
+  const [entryResults, setEntryResults] = useState<ResultWithAthlete[]>([])
+  const [entryRelayResults, setEntryRelayResults] = useState<RelayResultWithEvent[]>([])
   const [meetStats, setMeetStats] = useState({ eventsCount: 0, entriesCount: 0, resultsCount: 0 })
   const [selectedResult, setSelectedResult] = useState<SplitData | null>(null)
   const [selectedRelayResult, setSelectedRelayResult] = useState<RelayResultWithEvent | null>(null)
   const [relayAthletes, setRelayAthletes] = useState<Map<number, Athlete>>(new Map())
   const [loadingResults, setLoadingResults] = useState(false)
-  const [editingMeet, setEditingMeet] = useState<Meet | null>(null)
-  const [editForm, setEditForm] = useState<Partial<Meet>>({})
+  const [loadingEntries, setLoadingEntries] = useState(false)
   const [creatingMeet, setCreatingMeet] = useState(false)
   const [createForm, setCreateForm] = useState<Partial<Meet>>({})
   const [viewingEvents, setViewingEvents] = useState(false)
@@ -180,12 +183,6 @@ export function RacesScreen() {
   const [availableGroups, setAvailableGroups] = useState<Group[]>([])
   const [editingResult, setEditingResult] = useState<ResultWithAthlete | null>(null)
   const [resultTimeInput, setResultTimeInput] = useState('')
-  const [creatingResult, setCreatingResult] = useState<EventWithRace | null>(null)
-  const [newResultForm, setNewResultForm] = useState<{ fincode: number; timeInput: string }>({
-    fincode: 0,
-    timeInput: '',
-  })
-  const [availableAthletesForResult, setAvailableAthletesForResult] = useState<Athlete[]>([])
   const [splitInputs, setSplitInputs] = useState<{ distance: number; timeInput: string; splits_id?: number }[]>([])
   const [savingSplits, setSavingSplits] = useState(false)
   const [editingSplits, setEditingSplits] = useState(false)
@@ -193,10 +190,10 @@ export function RacesScreen() {
   const [relaySplitInputs, setRelaySplitInputs] = useState<{ distance: number; timeInput: string; relay_splits_id?: number }[]>([])
   const [savingRelaySplits, setSavingRelaySplits] = useState(false)
   const [editingRelaySplits, setEditingRelaySplits] = useState(false)
-  const [newResultSplitInputs, setNewResultSplitInputs] = useState<{ distance: number; timeInput: string }[]>([])
   const [allGroups, setAllGroups] = useState<Group[]>([])
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<number>>(new Set())
   const [selectedEventGroupIds, setSelectedEventGroupIds] = useState<Set<number>>(new Set())
+  const [meetGroupNames, setMeetGroupNames] = useState<string[]>([])
   const [editingRelayResult, setEditingRelayResult] = useState<RelayResultWithEvent | null>(null)
   const [relayLegInputs, setRelayLegInputs] = useState({
     leg1: '',
@@ -215,6 +212,11 @@ export function RacesScreen() {
     [meetEvents]
   )
 
+  const sortedEntryEvents = useMemo(
+    () => [...entryEvents].sort((a, b) => a.event_numb - b.event_numb),
+    [entryEvents]
+  )
+
   const resultsByEvent = useMemo(() => {
     const map = new Map<number, ResultWithAthlete[]>()
     results.forEach((result) => {
@@ -224,11 +226,33 @@ export function RacesScreen() {
     })
 
     map.forEach((list, key) => {
-      map.set(key, [...list].sort((a, b) => (a.res_time_decimal || 0) - (b.res_time_decimal || 0)))
+      map.set(
+        key,
+        [...list].sort((a, b) => {
+          const statusDiff = (b.status ?? 0) - (a.status ?? 0)
+          if (statusDiff !== 0) return statusDiff
+          return (a.res_time_decimal || 0) - (b.res_time_decimal || 0)
+        })
+      )
     })
 
     return map
   }, [results])
+
+  const entryResultsByEvent = useMemo(() => {
+    const map = new Map<number, ResultWithAthlete[]>()
+    entryResults.forEach((result) => {
+      const list = map.get(result.event_numb) || []
+      list.push(result)
+      map.set(result.event_numb, list)
+    })
+
+    map.forEach((list, key) => {
+      map.set(key, [...list].sort((a, b) => (a.entry_time_decimal || 0) - (b.entry_time_decimal || 0)))
+    })
+
+    return map
+  }, [entryResults])
 
   const relayResultsByEvent = useMemo(() => {
     const map = new Map<number, RelayResultWithEvent[]>()
@@ -248,6 +272,21 @@ export function RacesScreen() {
     return map
   }, [relayResults])
 
+  const entryRelayResultsByEvent = useMemo(() => {
+    const map = new Map<number, RelayResultWithEvent[]>()
+    entryRelayResults.forEach((result) => {
+      const list = map.get(result.event_numb) || []
+      list.push(result)
+      map.set(result.event_numb, list)
+    })
+
+    map.forEach((list, key) => {
+      map.set(key, [...list].sort((a, b) => (a.totalTime || 0) - (b.totalTime || 0)))
+    })
+
+    return map
+  }, [entryRelayResults])
+
   const eventsWithResults = useMemo(
     () =>
       sortedEvents.filter((event) => {
@@ -256,6 +295,16 @@ export function RacesScreen() {
         return (eventResults?.length || 0) + (eventRelayResults?.length || 0) > 0
       }),
     [sortedEvents, resultsByEvent, relayResultsByEvent]
+  )
+
+  const entryEventsWithResults = useMemo(
+    () =>
+      sortedEntryEvents.filter((event) => {
+        const eventResults = entryResultsByEvent.get(event.event_numb)
+        const eventRelayResults = entryRelayResultsByEvent.get(event.event_numb)
+        return (eventResults?.length || 0) + (eventRelayResults?.length || 0) > 0
+      }),
+    [sortedEntryEvents, entryResultsByEvent, entryRelayResultsByEvent]
   )
 
   type ResultSectionItem =
@@ -291,6 +340,35 @@ export function RacesScreen() {
     [eventsWithResults, resultsByEvent, relayResultsByEvent]
   )
 
+  const entrySections = useMemo(
+    () =>
+      entryEventsWithResults.map((event) => {
+        const isRelayEvent = event.race && event.race.relay_count > 1
+        const eventResults = entryResultsByEvent.get(event.event_numb) || []
+        const eventRelayResults = entryRelayResultsByEvent.get(event.event_numb) || []
+        let data: ResultSectionItem[] = []
+        if (isRelayEvent) {
+          data = eventRelayResults.map((relayResult, index) => ({
+            type: 'relay' as const,
+            relayResult,
+            rank: index + 1,
+          }))
+        } else {
+          data = eventResults.map((result, index) => ({
+            type: 'result' as const,
+            result,
+            rank: index + 1,
+          }))
+        }
+        return {
+          event,
+          isRelayEvent,
+          data,
+        }
+      }),
+    [entryEventsWithResults, entryResultsByEvent, entryRelayResultsByEvent]
+  )
+
   useEffect(() => {
     if (selectedSeason) {
       fetchMeets()
@@ -301,6 +379,14 @@ export function RacesScreen() {
     loadAllGroups()
   }, [])
 
+  useEffect(() => {
+    if (selectedMeet) {
+      fetchMeetGroups(selectedMeet.meet_id)
+    } else {
+      setMeetGroupNames([])
+    }
+  }, [selectedMeet])
+
   async function loadAllGroups() {
     try {
       const { data, error } = await supabase.from('_groups').select('*').order('id', { ascending: true })
@@ -308,6 +394,31 @@ export function RacesScreen() {
       setAllGroups(data || [])
     } catch {
       setAllGroups([])
+    }
+  }
+
+  async function fetchMeetGroups(meetId: number) {
+    try {
+      const { data: meetGroupsData, error } = await supabase.from('meet_groups').select('group_id').eq('meet_id', meetId)
+      if (error) throw error
+
+      const meetGroupIds = meetGroupsData?.map((mg: any) => mg.group_id) || []
+      if (meetGroupIds.length === 0) {
+        setMeetGroupNames([])
+        return
+      }
+
+      const { data: groupsData, error: groupsError } = await supabase
+        .from('_groups')
+        .select('id, group_name')
+        .in('id', meetGroupIds)
+        .order('id', { ascending: true })
+
+      if (groupsError) throw groupsError
+
+      setMeetGroupNames((groupsData || []).map((group: any) => group.group_name))
+    } catch {
+      setMeetGroupNames([])
     }
   }
 
@@ -566,6 +677,108 @@ export function RacesScreen() {
     }
   }
 
+  async function handleViewEntries(meet: Meet) {
+    setSelectedMeet(meet)
+    setViewingEntries(true)
+    setLoadingEntries(true)
+
+    try {
+      const { data: eventsData, error: eventsError } = await supabase
+        .rpc('get_meet_events_with_details', { p_meet_id: meet.meet_id })
+
+      if (eventsError) throw eventsError
+
+      const eventsWithRaces: EventWithRace[] = (eventsData || []).map((e: any) => ({
+        ms_id: e.ms_id,
+        meet_id: e.meet_id,
+        event_numb: e.event_numb,
+        ms_race_id: e.ms_race_id,
+        gender: e.gender,
+        ms_group_id: e.ms_group_id,
+        created_at: e.created_at,
+        race: e.race_id
+          ? {
+              race_id: e.race_id,
+              race_id_fin: e.race_id_fin,
+              distance: e.distance,
+              stroke_short_en: e.stroke_short_en,
+              stroke_long_en: e.stroke_long_en,
+              stroke_long_it: e.stroke_long_it,
+              relay_count: e.relay_count,
+            }
+          : undefined,
+        group: e.group_id
+          ? {
+              id: e.group_id,
+              group_name: e.group_name,
+            }
+          : undefined,
+      }))
+
+      setEntryEvents(eventsWithRaces)
+
+      const { data: entriesData } = await supabase
+        .from('results')
+        .select('*')
+        .eq('meet_id', meet.meet_id)
+        .eq('status', 0)
+        .order('event_numb', { ascending: true })
+        .order('entry_time_decimal', { ascending: true })
+
+      const fincodes = [...new Set(entriesData?.map((r: any) => r.fincode) || [])]
+      const { data: athletesData } = await supabase.from('athletes').select('*').in('fincode', fincodes)
+
+      const athleteMap = new Map(athletesData?.map((a: any) => [a.fincode, a]) || [])
+      const eventMap = new Map(eventsWithRaces?.map((e) => [`${e.meet_id}-${e.event_numb}`, e]) || [])
+
+      const transformedEntries: ResultWithAthlete[] = (entriesData || []).map((r: any) => {
+        const eventKey = `${r.meet_id}-${r.event_numb}`
+        const event = eventMap.get(eventKey)
+        return {
+          ...r,
+          athlete: athleteMap.get(r.fincode),
+          event,
+          race: event?.race,
+        }
+      })
+
+      const entriesWithFormattedTimes = await formatTimesInEntries(transformedEntries)
+      setEntryResults(entriesWithFormattedTimes)
+
+      const { data: relayEntriesData } = await supabase
+        .from('relay_results')
+        .select('*')
+        .eq('meet_id', meet.meet_id)
+        .eq('status', 0)
+        .order('event_numb', { ascending: true })
+
+      const transformedRelayEntries: RelayResultWithEvent[] = (relayEntriesData || []).map((r: any) => {
+        const eventKey = `${r.meet_id}-${r.event_numb}`
+        const event = eventMap.get(eventKey)
+        const totalTime = (r.leg1_entry_time || 0) + (r.leg2_entry_time || 0) + (r.leg3_entry_time || 0) + (r.leg4_entry_time || 0)
+        return {
+          ...r,
+          event,
+          race: event?.race,
+          totalTime,
+        }
+      })
+
+      transformedRelayEntries.sort((a, b) => {
+        if (a.event_numb !== b.event_numb) return a.event_numb - b.event_numb
+        return (a.totalTime || 0) - (b.totalTime || 0)
+      })
+
+      const relayEntriesWithFormattedTimes = await formatTimesInRelayResults(transformedRelayEntries)
+      setEntryRelayResults(relayEntriesWithFormattedTimes)
+    } catch {
+      setEntryResults([])
+      setEntryRelayResults([])
+    } finally {
+      setLoadingEntries(false)
+    }
+  }
+
   async function handleViewRelaySplits(relayResult: RelayResultWithEvent) {
     try {
       const fincodes = [
@@ -744,6 +957,19 @@ export function RacesScreen() {
       resultsData.map(async (result) => ({
         ...result,
         formattedTime: await formatTimeWithSupabase(result.res_time_decimal),
+      }))
+    )
+    return formattedResults
+  }
+
+  async function formatTimesInEntries(resultsData: ResultWithAthlete[]) {
+    const formattedResults = await Promise.all(
+      resultsData.map(async (result) => ({
+        ...result,
+        formattedTime:
+          result.entry_time_decimal && result.entry_time_decimal > 0
+            ? await formatTimeWithSupabase(result.entry_time_decimal)
+            : '',
       }))
     )
     return formattedResults
@@ -928,62 +1154,15 @@ export function RacesScreen() {
     setEditingResult(null)
     setResultTimeInput('')
     setResultSplitInputs([])
-    setCreatingResult(null)
-    setNewResultForm({ fincode: 0, timeInput: '' })
-    setNewResultSplitInputs([])
   }
 
-  async function handleEditMeet(meet: Meet) {
-    setEditingMeet(meet)
-    setEditForm(meet)
-    setSelectedMeet(null)
-
-    try {
-      const { data, error } = await supabase.from('meet_groups').select('group_id').eq('meet_id', meet.meet_id)
-      if (error) throw error
-      const groupIds = new Set(data?.map((mg: any) => mg.group_id) || [])
-      setSelectedGroupIds(groupIds)
-    } catch {
-      setSelectedGroupIds(new Set())
-    }
+  function closeEntriesView() {
+    setViewingEntries(false)
+    setEntryEvents([])
+    setEntryResults([])
+    setEntryRelayResults([])
   }
 
-  async function handleSaveEdit() {
-    if (!editingMeet || !editForm) return
-
-    try {
-      const { error } = await supabase
-        .from('meets')
-        .update({
-          meet_name: editForm.meet_name,
-          pool_name: editForm.pool_name,
-          place: editForm.place,
-          nation: editForm.nation,
-          min_date: editForm.min_date,
-          max_date: editForm.max_date,
-          meet_course: editForm.meet_course,
-        })
-        .eq('meet_id', editingMeet.meet_id)
-
-      if (error) throw error
-
-      const { error: deleteError } = await supabase.from('meet_groups').delete().eq('meet_id', editingMeet.meet_id)
-      if (deleteError) throw deleteError
-
-      if (selectedGroupIds.size > 0) {
-        const groupInserts = Array.from(selectedGroupIds).map((group_id) => ({ meet_id: editingMeet.meet_id, group_id }))
-        const { error: insertError } = await supabase.from('meet_groups').insert(groupInserts)
-        if (insertError) throw insertError
-      }
-
-      await fetchMeets()
-      setEditingMeet(null)
-      setEditForm({})
-      setSelectedGroupIds(new Set())
-    } catch {
-      Alert.alert('Error', 'Failed to update meet')
-    }
-  }
 
   function handleAddNewMeet() {
     setCreateForm({ meet_name: '', pool_name: '', place: '', nation: '', min_date: '', max_date: '', meet_course: 1 })
@@ -1625,137 +1804,6 @@ export function RacesScreen() {
     }
   }
 
-  async function handleAddResult(event: EventWithRace) {
-    setCreatingResult(event)
-    setNewResultForm({ fincode: 0, timeInput: '' })
-
-    if (event.race?.distance) {
-      const splitDistances = generateSplitDistances(event.race.distance)
-      setNewResultSplitInputs(splitDistances.map((distance) => ({ distance, timeInput: '' })))
-    } else {
-      setNewResultSplitInputs([])
-    }
-
-    try {
-      if (!selectedSeason || !selectedMeet) return
-
-      const { data: athletesData } = await supabase.rpc('eligible_athletes', {
-        p_season_id: selectedSeason.season_id,
-        p_event_gender: event.gender,
-        p_event_ms_id: event.ms_id,
-        p_race_id: event.ms_race_id,
-        p_meet_course: selectedMeet.meet_course,
-      })
-
-      setAvailableAthletesForResult(athletesData || [])
-    } catch {
-      setAvailableAthletesForResult([])
-    }
-  }
-
-  async function handleSaveNewResult(timeOverride?: string, statusOverride?: ResultStatus) {
-    if (!creatingResult || !selectedMeet || !newResultForm.fincode) {
-      Alert.alert('Validation', 'Please select an athlete')
-      return
-    }
-
-    const timeToUse = timeOverride ?? newResultForm.timeInput
-    const statusToUse = statusOverride ?? 'FINISHED'
-
-    const milliseconds = statusToUse !== 'FINISHED' ? 0 : timeStringToMilliseconds(timeToUse)
-
-    if (statusToUse === 'FINISHED' && milliseconds === 0 && timeToUse !== '000000') {
-      Alert.alert('Validation', 'Invalid time format. Please use mmsshh (e.g., 012345 for 1:23.45)')
-      return
-    }
-
-    let statusNumeric: number
-    switch (statusToUse) {
-      case 'DSQ':
-        statusNumeric = 1
-        break
-      case 'DNF':
-        statusNumeric = 2
-        break
-      case 'DNS':
-        statusNumeric = 3
-        break
-      case 'FINISHED':
-      default:
-        statusNumeric = 4
-        break
-    }
-
-    try {
-      const { data: existingResults } = await supabase
-        .from('results')
-        .select('res_id')
-        .eq('fincode', newResultForm.fincode)
-        .eq('meet_id', selectedMeet.meet_id)
-        .eq('event_numb', creatingResult.event_numb)
-
-      if (existingResults && existingResults.length > 0) {
-        Alert.alert('Info', 'This athlete already has a result for this event.')
-        return
-      }
-
-      const { data, error } = await supabase
-        .from('results')
-        .insert([
-          {
-            fincode: newResultForm.fincode,
-            meet_id: selectedMeet.meet_id,
-            event_numb: creatingResult.event_numb,
-            res_time_decimal: milliseconds,
-            status: statusNumeric,
-            entry_time_decimal: 0,
-          },
-        ])
-        .select()
-
-      if (error) throw error
-
-      if (statusToUse === 'FINISHED' && data && data.length > 0 && newResultSplitInputs.length > 0) {
-        const resultId = data[0].res_id
-
-        const splitsToSave = newResultSplitInputs
-          .filter((input) => input.timeInput.trim() !== '')
-          .map((input) => ({
-            splits_res_id: resultId,
-            distance: input.distance,
-            split_time: formattedTimeToMilliseconds(input.timeInput),
-          }))
-
-        if (splitsToSave.length > 0) {
-          await supabase.from('splits').insert(splitsToSave)
-        }
-      }
-
-      const athlete = availableAthletesForResult.find((a) => a.fincode === newResultForm.fincode)
-      const event = events.find((e) => e.event_numb === creatingResult.event_numb)
-      const formattedTime = milliseconds > 0 ? await formatTimeWithSupabase(milliseconds) : ''
-
-      if (data && data.length > 0) {
-        const newResult: ResultWithAthlete = {
-          ...data[0],
-          athlete,
-          event,
-          race: event?.race,
-          result_status: statusToUse,
-          formattedTime,
-        }
-        setResults((prevResults) => [...prevResults, newResult])
-      }
-
-      setCreatingResult(null)
-      setNewResultForm({ fincode: 0, timeInput: '' })
-      setNewResultSplitInputs([])
-      setAvailableAthletesForResult([])
-    } catch {
-      Alert.alert('Error', 'Failed to create result')
-    }
-  }
-
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -1829,6 +1877,12 @@ export function RacesScreen() {
 
                 <View style={styles.modalGrid}>
                   <View style={styles.modalRowBlock}>
+                    <Text style={styles.modalLabel}>Date Range</Text>
+                    <Text style={styles.modalValue}>
+                      {new Date(selectedMeet.min_date).toLocaleDateString()} - {new Date(selectedMeet.max_date).toLocaleDateString()}
+                    </Text>
+                  </View>
+                  <View style={styles.modalRowBlock}>
                     <Text style={styles.modalLabel}>Location</Text>
                     <Text style={styles.modalValue}>
                       {selectedMeet.place || 'Unknown'}{selectedMeet.nation ? `, ${selectedMeet.nation}` : ''}
@@ -1843,36 +1897,33 @@ export function RacesScreen() {
                     <Text style={styles.modalValue}>{getCourseLength(selectedMeet.meet_course)}</Text>
                   </View>
                   <View style={styles.modalRowBlock}>
-                    <Text style={styles.modalLabel}>Date Range</Text>
+                    <Text style={styles.modalLabel}>Groups</Text>
                     <Text style={styles.modalValue}>
-                      {new Date(selectedMeet.min_date).toLocaleDateString()} - {new Date(selectedMeet.max_date).toLocaleDateString()}
+                      {meetGroupNames.length > 0 ? meetGroupNames.join(', ') : 'All groups'}
                     </Text>
                   </View>
+
                   <View style={styles.modalStatsRow}>
                     <View style={styles.modalStatBlock}>
-                      <Text style={styles.modalLabel}>Events</Text>
-                      <Text style={styles.modalValue}>{meetStats.eventsCount}</Text>
+                      <Text style={styles.modalStatLabel}>Events</Text>
+                      <Text style={styles.modalStatValue}>{meetStats.eventsCount}</Text>
                     </View>
                     <View style={styles.modalStatBlock}>
-                      <Text style={styles.modalLabel}>Entries</Text>
-                      <Text style={styles.modalValue}>{meetStats.entriesCount}</Text>
+                      <Text style={styles.modalStatLabel}>Entries</Text>
+                      <Text style={styles.modalStatValue}>{meetStats.entriesCount}</Text>
                     </View>
                     <View style={styles.modalStatBlock}>
-                      <Text style={styles.modalLabel}>Results</Text>
-                      <Text style={styles.modalValue}>{meetStats.resultsCount}</Text>
+                      <Text style={styles.modalStatLabel}>Results</Text>
+                      <Text style={styles.modalStatValue}>{meetStats.resultsCount}</Text>
                     </View>
                   </View>
                 </View>
-
-                <View style={styles.modalActionsRow}>
-                  <TouchableOpacity style={styles.secondaryButton} onPress={() => handleEditMeet(selectedMeet)}>
-                    <Text style={styles.secondaryButtonText}>Edit</Text>
+                <View style={styles.modalActionsRowCentered}>
+                  <TouchableOpacity style={[styles.modalActionButton, styles.modalActionEntries]} onPress={() => handleViewEntries(selectedMeet)}>
+                    <Text style={styles.modalActionButtonText}>Entries</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.secondaryButton} onPress={() => handleViewResults(selectedMeet)}>
-                    <Text style={styles.secondaryButtonText}>Results</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.secondaryButton} onPress={() => handleViewEvents(selectedMeet)}>
-                    <Text style={styles.secondaryButtonText}>Events</Text>
+                  <TouchableOpacity style={[styles.modalActionButton, styles.modalActionResults]} onPress={() => handleViewResults(selectedMeet)}>
+                    <Text style={styles.modalActionButtonText}>Results</Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -1881,10 +1932,135 @@ export function RacesScreen() {
         </Pressable>
       </Modal>
 
+      {/* Entries Modal */}
+      <Modal visible={viewingEntries} transparent animationType="fade" onRequestClose={closeEntriesView}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={closeEntriesView} />
+          <View style={styles.modalLargeCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Entries {selectedMeet ? `- ${selectedMeet.meet_name}` : ''}</Text>
+              <TouchableOpacity onPress={closeEntriesView}>
+                <MaterialCommunityIcons name="close" size={22} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSubtitle}>
+              Events: {entryEvents.length || meetStats.eventsCount} • Entries: {entryResults.length + entryRelayResults.length}
+            </Text>
+
+            {loadingEntries ? (
+              <View style={styles.centered}>
+                <ActivityIndicator size="large" color="#0284c7" />
+                <Text style={styles.loadingText}>Loading entries...</Text>
+              </View>
+            ) : entryResults.length === 0 && entryRelayResults.length === 0 ? (
+              <View style={styles.centered}>
+                <Text style={styles.emptyText}>No entries found for this meet</Text>
+              </View>
+            ) : (
+              <SectionList
+                sections={entrySections as Array<{
+                  event: EventWithRace
+                  isRelayEvent: boolean | undefined
+                  data: ResultSectionItem[]
+                }>}
+                keyExtractor={(item) =>
+                  item.type === 'relay'
+                    ? `relay-entry-${item.relayResult.relay_result_id}`
+                    : `entry-${item.result.res_id}`
+                }
+                style={styles.modalScroll}
+                contentContainerStyle={styles.modalScrollContent}
+                initialNumToRender={12}
+                windowSize={10}
+                maxToRenderPerBatch={10}
+                updateCellsBatchingPeriod={50}
+                stickySectionHeadersEnabled={false}
+                renderSectionHeader={({ section }) => {
+                  const event = section.event
+                  const race = event.race
+                  const raceName = race
+                    ? race.relay_count > 1
+                      ? `${race.relay_count}x${race.distance}m ${race.stroke_long_en}`
+                      : `${race.distance}m ${race.stroke_long_en}`
+                    : `Event ${event.event_numb}`
+                  const categoryLabel = event.group_names?.length
+                    ? event.group_names.join(', ')
+                    : (event.group?.group_name || 'Unknown')
+                  const strokeLabel = race?.stroke_short_en || race?.stroke_long_en || 'Unknown'
+                  const distanceLabel = race?.distance ? `${race.distance}m` : 'Unknown'
+
+                  return (
+                    <View style={[styles.sectionCard, styles.sectionHeaderCard]}>
+                      <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Event #{event.event_numb} - {raceName}</Text>
+                        <View style={styles.sectionMetaRow}>
+                          <Text style={styles.sectionMetaText}>{distanceLabel}</Text>
+                          <Text style={styles.sectionMetaText}>{strokeLabel}</Text>
+                          <Text style={styles.sectionMetaText}>{event.gender || 'N/A'}</Text>
+                          <Text style={styles.sectionMetaText}>{categoryLabel}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  )
+                }}
+                renderItem={({ item }) =>
+                  item.type === 'relay' ? (
+                    <View style={[styles.listRow, styles.listRowStacked, styles.sectionRow]}>
+                      <View style={styles.resultTopRow}>
+                        <Text style={styles.rankText}>{item.rank}</Text>
+                        <Text style={[styles.itemTitle, styles.relayNameText]} numberOfLines={1}>
+                          {item.relayResult.relay_name}
+                        </Text>
+                      </View>
+                      <View style={styles.resultTimeRow}>
+                        <Text style={styles.timeText}>
+                          {item.relayResult.formattedTime || (item.relayResult.totalTime ? formatTime(item.relayResult.totalTime) : '--:--.--')}
+                        </Text>
+                      </View>
+                      <View style={[styles.rowActions, styles.rowActionsStacked]}>
+                        <TouchableOpacity style={styles.linkButton} onPress={() => handleEditRelayResult(item.relayResult)}>
+                          <Text style={styles.linkButtonText}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.linkButton} onPress={() => handleDeleteRelayResult(item.relayResult)}>
+                          <Text style={[styles.linkButtonText, styles.linkDanger]}>Delete</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={[styles.listRow, styles.listRowStacked, styles.sectionRow]}>
+                      <View style={styles.resultTopRow}>
+                        <Text style={styles.rankText}>{item.rank}</Text>
+                        <Text style={[styles.itemTitle, styles.resultName]}>
+                          {item.result.athlete?.firstname} {item.result.athlete?.lastname}
+                        </Text>
+                      </View>
+                      <View style={styles.resultTimeRow}>
+                        <Text style={styles.timeText}>
+                          {item.result.formattedTime || (item.result.entry_time_decimal ? formatTime(item.result.entry_time_decimal) : '--:--.--')}
+                        </Text>
+                      </View>
+                      <View style={[styles.rowActions, styles.rowActionsStacked]}>
+                        <TouchableOpacity style={styles.linkButton} onPress={() => handleEditResult(item.result)}>
+                          <Text style={styles.linkButtonText}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.linkButton} onPress={() => handleDeleteResult(item.result)}>
+                          <Text style={[styles.linkButtonText, styles.linkDanger]}>Delete</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )
+                }
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Results Modal */}
       <Modal visible={viewingResults} transparent animationType="fade" onRequestClose={closeResultsView}>
-        <Pressable style={styles.modalOverlay} onPress={closeResultsView}>
-          <Pressable style={styles.modalLargeCard} onPress={(e) => e.stopPropagation()}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={closeResultsView} />
+          <View style={styles.modalLargeCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Results {selectedMeet ? `- ${selectedMeet.meet_name}` : ''}</Text>
               <TouchableOpacity onPress={closeResultsView}>
@@ -1920,7 +2096,6 @@ export function RacesScreen() {
                 windowSize={10}
                 maxToRenderPerBatch={10}
                 updateCellsBatchingPeriod={50}
-                removeClippedSubviews
                 stickySectionHeadersEnabled={false}
                 renderSectionHeader={({ section }) => {
                   const event = section.event
@@ -1930,7 +2105,6 @@ export function RacesScreen() {
                       ? `${race.relay_count}x${race.distance}m ${race.stroke_long_en}`
                       : `${race.distance}m ${race.stroke_long_en}`
                     : `Event ${event.event_numb}`
-                  const entryCount = eventEntryCounts.get(event.event_numb) || 0
                   const categoryLabel = event.group_names?.length
                     ? event.group_names.join(', ')
                     : (event.group?.group_name || 'Unknown')
@@ -1942,28 +2116,10 @@ export function RacesScreen() {
                       <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Event #{event.event_numb} - {raceName}</Text>
                         <View style={styles.sectionMetaRow}>
-                          <Text style={styles.sectionMetaText}>{distanceLabel}</Text>
-                          <Text style={styles.sectionMetaText}>{strokeLabel}</Text>
                           <Text style={styles.sectionMetaText}>{event.gender || 'N/A'}</Text>
                           <Text style={styles.sectionMetaText}>{categoryLabel}</Text>
-                          <Text style={styles.sectionMetaText}>{entryCount} entries</Text>
-                        </View>
-                        <View style={styles.rowActions}>
-                          <TouchableOpacity style={styles.linkButton} onPress={() => handleAddEntriesForEvent(event)}>
-                            <Text style={styles.linkButtonText}>Entries</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity style={styles.linkButton} onPress={() => handleEditEvent(event)}>
-                            <Text style={styles.linkButtonText}>Edit</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity style={styles.linkButton} onPress={() => handleDeleteEvent(event)}>
-                            <Text style={[styles.linkButtonText, styles.linkDanger]}>Delete</Text>
-                          </TouchableOpacity>
                         </View>
                       </View>
-
-                      <TouchableOpacity style={styles.sectionFab} onPress={() => handleAddResult(event)}>
-                        <MaterialCommunityIcons name="plus" size={18} color="#fff" />
-                      </TouchableOpacity>
                     </View>
                   )
                 }}
@@ -2016,8 +2172,8 @@ export function RacesScreen() {
                 }
               />
             )}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* Events Modal */}
@@ -2099,21 +2255,18 @@ export function RacesScreen() {
         </Pressable>
       </Modal>
 
-      {/* Create/Edit Meet Modal */}
-      <Modal visible={creatingMeet || !!editingMeet} transparent animationType="fade" onRequestClose={() => {
+      {/* Create Meet Modal */}
+      <Modal visible={creatingMeet} transparent animationType="fade" onRequestClose={() => {
         setCreatingMeet(false)
-        setEditingMeet(null)
       }}>
         <Pressable style={styles.modalOverlay} onPress={() => {
           setCreatingMeet(false)
-          setEditingMeet(null)
         }}>
           <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{editingMeet ? 'Edit Meet' : 'Add New Meet'}</Text>
+              <Text style={styles.modalTitle}>Add New Meet</Text>
               <TouchableOpacity onPress={() => {
                 setCreatingMeet(false)
-                setEditingMeet(null)
               }}>
                 <MaterialCommunityIcons name="close" size={22} color="#64748b" />
               </TouchableOpacity>
@@ -2123,10 +2276,8 @@ export function RacesScreen() {
               <Text style={styles.inputLabel}>Meet Name *</Text>
               <TextInput
                 style={styles.input}
-                value={(editingMeet ? editForm.meet_name : createForm.meet_name) || ''}
-                onChangeText={(text) =>
-                  editingMeet ? setEditForm({ ...editForm, meet_name: text }) : setCreateForm({ ...createForm, meet_name: text })
-                }
+                value={createForm.meet_name || ''}
+                onChangeText={(text) => setCreateForm({ ...createForm, meet_name: text })}
                 placeholder="Meet name"
               />
 
@@ -2135,10 +2286,8 @@ export function RacesScreen() {
                   <Text style={styles.inputLabel}>Place</Text>
                   <TextInput
                     style={styles.input}
-                    value={(editingMeet ? editForm.place : createForm.place) || ''}
-                    onChangeText={(text) =>
-                      editingMeet ? setEditForm({ ...editForm, place: text }) : setCreateForm({ ...createForm, place: text })
-                    }
+                    value={createForm.place || ''}
+                    onChangeText={(text) => setCreateForm({ ...createForm, place: text })}
                     placeholder="City"
                   />
                 </View>
@@ -2146,10 +2295,8 @@ export function RacesScreen() {
                   <Text style={styles.inputLabel}>Nation</Text>
                   <TextInput
                     style={styles.input}
-                    value={(editingMeet ? editForm.nation : createForm.nation) || ''}
-                    onChangeText={(text) =>
-                      editingMeet ? setEditForm({ ...editForm, nation: text }) : setCreateForm({ ...createForm, nation: text })
-                    }
+                    value={createForm.nation || ''}
+                    onChangeText={(text) => setCreateForm({ ...createForm, nation: text })}
                     placeholder="Country"
                   />
                 </View>
@@ -2158,32 +2305,26 @@ export function RacesScreen() {
               <Text style={styles.inputLabel}>Pool Name</Text>
               <TextInput
                 style={styles.input}
-                value={(editingMeet ? editForm.pool_name : createForm.pool_name) || ''}
-                onChangeText={(text) =>
-                  editingMeet ? setEditForm({ ...editForm, pool_name: text }) : setCreateForm({ ...createForm, pool_name: text })
-                }
+                value={createForm.pool_name || ''}
+                onChangeText={(text) => setCreateForm({ ...createForm, pool_name: text })}
                 placeholder="Pool name"
               />
 
               <Text style={styles.inputLabel}>Course</Text>
               <View style={styles.rowButtons}>
                 <TouchableOpacity
-                  style={[styles.filterButton, (editingMeet ? editForm.meet_course : createForm.meet_course) === 1 && styles.filterButtonActive]}
-                  onPress={() =>
-                    editingMeet ? setEditForm({ ...editForm, meet_course: 1 }) : setCreateForm({ ...createForm, meet_course: 1 })
-                  }
+                  style={[styles.filterButton, createForm.meet_course === 1 && styles.filterButtonActive]}
+                  onPress={() => setCreateForm({ ...createForm, meet_course: 1 })}
                 >
-                  <Text style={[styles.filterButtonText, (editingMeet ? editForm.meet_course : createForm.meet_course) === 1 && styles.filterButtonTextActive]}>
+                  <Text style={[styles.filterButtonText, createForm.meet_course === 1 && styles.filterButtonTextActive]}>
                     50m
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.filterButton, (editingMeet ? editForm.meet_course : createForm.meet_course) === 2 && styles.filterButtonActive]}
-                  onPress={() =>
-                    editingMeet ? setEditForm({ ...editForm, meet_course: 2 }) : setCreateForm({ ...createForm, meet_course: 2 })
-                  }
+                  style={[styles.filterButton, createForm.meet_course === 2 && styles.filterButtonActive]}
+                  onPress={() => setCreateForm({ ...createForm, meet_course: 2 })}
                 >
-                  <Text style={[styles.filterButtonText, (editingMeet ? editForm.meet_course : createForm.meet_course) === 2 && styles.filterButtonTextActive]}>
+                  <Text style={[styles.filterButtonText, createForm.meet_course === 2 && styles.filterButtonTextActive]}>
                     25m
                   </Text>
                 </TouchableOpacity>
@@ -2192,27 +2333,26 @@ export function RacesScreen() {
               <Text style={styles.inputLabel}>Start Date *</Text>
               <TextInput
                 style={styles.input}
-                value={(editingMeet ? editForm.min_date : createForm.min_date) || ''}
-                onChangeText={(text) => (editingMeet ? setEditForm({ ...editForm, min_date: text }) : setCreateForm({ ...createForm, min_date: text }))}
+                value={createForm.min_date || ''}
+                onChangeText={(text) => setCreateForm({ ...createForm, min_date: text })}
                 placeholder="YYYY-MM-DD"
               />
 
               <Text style={styles.inputLabel}>End Date *</Text>
               <TextInput
                 style={styles.input}
-                value={(editingMeet ? editForm.max_date : createForm.max_date) || ''}
-                onChangeText={(text) => (editingMeet ? setEditForm({ ...editForm, max_date: text }) : setCreateForm({ ...createForm, max_date: text }))}
+                value={createForm.max_date || ''}
+                onChangeText={(text) => setCreateForm({ ...createForm, max_date: text })}
                 placeholder="YYYY-MM-DD"
               />
 
               <View style={styles.modalActionsRow}>
-                <TouchableOpacity style={styles.primaryButton} onPress={editingMeet ? handleSaveEdit : handleCreateMeet}>
-                  <Text style={styles.primaryButtonText}>{editingMeet ? 'Save' : 'Create Meet'}</Text>
+                <TouchableOpacity style={styles.primaryButton} onPress={handleCreateMeet}>
+                  <Text style={styles.primaryButtonText}>Create Meet</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.secondaryButton}
                   onPress={() => {
-                    setEditingMeet(null)
                     setCreatingMeet(false)
                   }}
                 >
@@ -2388,64 +2528,66 @@ export function RacesScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalScroll}>
-              <View style={styles.splitHeaderRow}>
-                <View style={[styles.splitCol, styles.splitColLeft]}>
-                  <Text style={styles.splitHeaderText}>Distance</Text>
-                </View>
-                <View style={styles.splitCol}>
-                  <Text style={styles.splitHeaderText}>Split</Text>
-                </View>
-                <View style={styles.splitCol}>
-                  <Text style={styles.splitHeaderText}>Lap</Text>
-                </View>
-              </View>
-              {splitInputs.map((input, idx) => {
-                const existingSplit = selectedResult?.splits.find((s) => s.distance === input.distance)
-                const currentTimeRaw = existingSplit?.formattedTime || input.timeInput
-                const currentTimeStr = currentTimeRaw ? formattedTimeToDisplay(currentTimeRaw) : ''
-                const currentMs = currentTimeStr ? formattedTimeToMilliseconds(currentTimeStr) : 0
-                const prevInput = idx > 0 ? splitInputs[idx - 1] : undefined
-                const prevExistingSplit = prevInput
-                  ? selectedResult?.splits.find((s) => s.distance === prevInput.distance)
-                  : undefined
-                const prevTimeRaw = prevExistingSplit?.formattedTime || prevInput?.timeInput
-                const prevTimeStr = prevTimeRaw ? formattedTimeToDisplay(prevTimeRaw) : ''
-                const prevMs = prevTimeStr ? formattedTimeToMilliseconds(prevTimeStr) : 0
-                const lapMs = currentMs > 0 && (idx === 0 || prevMs > 0) ? currentMs - (idx === 0 ? 0 : prevMs) : 0
-                const lapDisplay = lapMs > 0 ? formatTime(lapMs) : '--:--.--'
-
-                return (
-                  <View key={`${input.distance}-${idx}`} style={styles.splitRow}>
-                    <View style={[styles.splitCol, styles.splitColLeft]}>
-                      <Text style={styles.splitDistance}>{input.distance}m</Text>
-                    </View>
-                    <View style={styles.splitCol}>
-                      {editingSplits ? (
-                        <TextInput
-                          style={styles.splitInput}
-                          value={input.timeInput}
-                          onChangeText={(text) => {
-                            const newInputs = [...splitInputs]
-                            newInputs[idx].timeInput = text
-                            setSplitInputs(newInputs)
-                          }}
-                          placeholder="mm:ss.cc"
-                          keyboardType="numeric"
-                        />
-                      ) : (
-                        <Text style={styles.splitValue}>
-                          {existingSplit?.formattedTime || (input.timeInput ? formattedTimeToDisplay(input.timeInput) : '--:--.--')}
-                        </Text>
-                      )}
-                    </View>
-                    <View style={styles.splitCol}>
-                      <Text style={styles.splitLapValue}>{lapDisplay}</Text>
-                    </View>
+            <View style={styles.modalBody}>
+              <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+                <View style={styles.splitHeaderRow}>
+                  <View style={[styles.splitCol, styles.splitColLeft]}>
+                    <Text style={styles.splitHeaderText}>Distance</Text>
                   </View>
-                )
-              })}
-            </ScrollView>
+                  <View style={styles.splitCol}>
+                    <Text style={styles.splitHeaderText}>Split</Text>
+                  </View>
+                  <View style={styles.splitCol}>
+                    <Text style={styles.splitHeaderText}>Lap</Text>
+                  </View>
+                </View>
+                {splitInputs.map((input, idx) => {
+                  const existingSplit = selectedResult?.splits.find((s) => s.distance === input.distance)
+                  const currentTimeRaw = existingSplit?.formattedTime || input.timeInput
+                  const currentTimeStr = currentTimeRaw ? formattedTimeToDisplay(currentTimeRaw) : ''
+                  const currentMs = currentTimeStr ? formattedTimeToMilliseconds(currentTimeStr) : 0
+                  const prevInput = idx > 0 ? splitInputs[idx - 1] : undefined
+                  const prevExistingSplit = prevInput
+                    ? selectedResult?.splits.find((s) => s.distance === prevInput.distance)
+                    : undefined
+                  const prevTimeRaw = prevExistingSplit?.formattedTime || prevInput?.timeInput
+                  const prevTimeStr = prevTimeRaw ? formattedTimeToDisplay(prevTimeRaw) : ''
+                  const prevMs = prevTimeStr ? formattedTimeToMilliseconds(prevTimeStr) : 0
+                  const lapMs = currentMs > 0 && (idx === 0 || prevMs > 0) ? currentMs - (idx === 0 ? 0 : prevMs) : 0
+                  const lapDisplay = lapMs > 0 ? formatTime(lapMs) : '--:--.--'
+
+                  return (
+                    <View key={`${input.distance}-${idx}`} style={styles.splitRow}>
+                      <View style={[styles.splitCol, styles.splitColLeft]}>
+                        <Text style={styles.splitDistance}>{input.distance}m</Text>
+                      </View>
+                      <View style={styles.splitCol}>
+                        {editingSplits ? (
+                          <TextInput
+                            style={styles.splitInput}
+                            value={input.timeInput}
+                            onChangeText={(text) => {
+                              const newInputs = [...splitInputs]
+                              newInputs[idx].timeInput = text
+                              setSplitInputs(newInputs)
+                            }}
+                            placeholder="mm:ss.cc"
+                            keyboardType="numeric"
+                          />
+                        ) : (
+                          <Text style={styles.splitValue}>
+                            {existingSplit?.formattedTime || (input.timeInput ? formattedTimeToDisplay(input.timeInput) : '--:--.--')}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={styles.splitCol}>
+                        <Text style={styles.splitLapValue}>{lapDisplay}</Text>
+                      </View>
+                    </View>
+                  )
+                })}
+              </ScrollView>
+            </View>
 
             <View style={styles.modalActionsRow}>
               {!editingSplits ? (
@@ -2453,8 +2595,8 @@ export function RacesScreen() {
                   <TouchableOpacity style={styles.primaryButton} onPress={() => setEditingSplits(true)}>
                     <Text style={styles.primaryButtonText}>Edit Splits</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.secondaryButton} onPress={() => setSelectedResult(null)}>
-                    <Text style={styles.secondaryButtonText}>Close</Text>
+                  <TouchableOpacity style={[styles.secondaryButton, styles.closeActionButton]} onPress={() => setSelectedResult(null)}>
+                    <Text style={[styles.secondaryButtonText, styles.closeActionButtonText]}>Close</Text>
                   </TouchableOpacity>
                 </>
               ) : (
@@ -2483,55 +2625,57 @@ export function RacesScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalScroll}>
-              {(selectedRelayResult
-                ? [
-                    {
-                      label: 'Leg 1',
-                      fincode: selectedRelayResult.leg1_fincode,
-                      time: selectedRelayResult.leg1_res_time,
-                    },
-                    {
-                      label: 'Leg 2',
-                      fincode: selectedRelayResult.leg2_fincode,
-                      time: selectedRelayResult.leg2_res_time,
-                    },
-                    {
-                      label: 'Leg 3',
-                      fincode: selectedRelayResult.leg3_fincode,
-                      time: selectedRelayResult.leg3_res_time,
-                    },
-                    {
-                      label: 'Leg 4',
-                      fincode: selectedRelayResult.leg4_fincode,
-                      time: selectedRelayResult.leg4_res_time,
-                    },
-                  ]
-                : []
-              ).map((leg, idx) => {
-                const athlete = relayAthletes.get(leg.fincode)
-                const athleteName = athlete
-                  ? `${athlete.firstname} ${athlete.lastname}`
-                  : leg.fincode
-                    ? `FIN: ${leg.fincode}`
-                    : 'Unknown'
-                const formattedTime = leg.time && leg.time > 0 ? formatTime(leg.time) : '--:--.--'
+            <View style={styles.modalBody}>
+              <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+                {(selectedRelayResult
+                  ? [
+                      {
+                        label: 'Leg 1',
+                        fincode: selectedRelayResult.leg1_fincode,
+                        time: selectedRelayResult.leg1_res_time,
+                      },
+                      {
+                        label: 'Leg 2',
+                        fincode: selectedRelayResult.leg2_fincode,
+                        time: selectedRelayResult.leg2_res_time,
+                      },
+                      {
+                        label: 'Leg 3',
+                        fincode: selectedRelayResult.leg3_fincode,
+                        time: selectedRelayResult.leg3_res_time,
+                      },
+                      {
+                        label: 'Leg 4',
+                        fincode: selectedRelayResult.leg4_fincode,
+                        time: selectedRelayResult.leg4_res_time,
+                      },
+                    ]
+                  : []
+                ).map((leg, idx) => {
+                  const athlete = relayAthletes.get(leg.fincode)
+                  const athleteName = athlete
+                    ? `${athlete.firstname} ${athlete.lastname}`
+                    : leg.fincode
+                      ? `FIN: ${leg.fincode}`
+                      : 'Unknown'
+                  const formattedTime = leg.time && leg.time > 0 ? formatTime(leg.time) : '--:--.--'
 
-                return (
-                  <View key={`${leg.label}-${idx}`} style={styles.relayLegRow}>
-                    <Text style={styles.relayLegLabel}>{leg.label}</Text>
-                    <View style={styles.relayLegMeta}>
-                      <Text style={styles.relayLegName} numberOfLines={1}>{athleteName}</Text>
-                      <Text style={styles.relayLegTime}>{formattedTime}</Text>
+                  return (
+                    <View key={`${leg.label}-${idx}`} style={styles.relayLegRow}>
+                      <Text style={styles.relayLegLabel}>{leg.label}</Text>
+                      <View style={styles.relayLegMeta}>
+                        <Text style={styles.relayLegName} numberOfLines={1}>{athleteName}</Text>
+                        <Text style={styles.relayLegTime}>{formattedTime}</Text>
+                      </View>
                     </View>
-                  </View>
-                )
-              })}
-            </ScrollView>
+                  )
+                })}
+              </ScrollView>
+            </View>
 
             <View style={styles.modalActionsRow}>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => setSelectedRelayResult(null)}>
-                <Text style={styles.secondaryButtonText}>Close</Text>
+              <TouchableOpacity style={[styles.secondaryButton, styles.closeActionButton]} onPress={() => setSelectedRelayResult(null)}>
+                <Text style={[styles.secondaryButtonText, styles.closeActionButtonText]}>Close</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -2638,6 +2782,13 @@ const styles = StyleSheet.create({
     color: '#1e293b',
     fontWeight: '600',
     textAlign: 'center',
+  },
+  closeActionButton: {
+    backgroundColor: '#dc2626',
+    borderColor: '#dc2626',
+  },
+  closeActionButtonText: {
+    color: '#fff',
   },
   content: {
     flex: 1,
@@ -2750,6 +2901,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 72,
+  },
+  modalStatLabel: {
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  modalStatValue: {
+    fontSize: 16,
+    color: '#0f172a',
+    fontWeight: '700',
+    textAlign: 'center',
   },
   modalRowBlock: {
     marginBottom: 6,
@@ -2768,6 +2935,34 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 12,
+  },
+  modalActionsRowCentered: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    gap: 8,
+    marginTop: 12,
+    justifyContent: 'space-between',
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modalActionButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalActionButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  modalActionResults: {
+    backgroundColor: '#7c3aed',
+  },
+  modalActionEntries: {
+    backgroundColor: '#facc15',
   },
   modalBody: {
     flex: 1,

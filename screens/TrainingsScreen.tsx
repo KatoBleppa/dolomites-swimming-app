@@ -427,6 +427,27 @@ export function TrainingsScreen() {
     return `${currentWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
   }
 
+  const attendanceCounts = athletes.reduce(
+    (acc, athlete) => {
+      switch (athlete.status) {
+        case 0:
+          acc.present += 1
+          break
+        case 1:
+          acc.late += 1
+          break
+        case 2:
+          acc.justified += 1
+          break
+        case 3:
+          acc.absent += 1
+          break
+      }
+      return acc
+    },
+    { present: 0, late: 0, justified: 0, absent: 0 }
+  )
+
   const weekDays = getWeekDays(currentWeekStart)
   const dayNames = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
 
@@ -761,58 +782,73 @@ export function TrainingsScreen() {
                 <Text style={styles.loadingText}>Loading athletes...</Text>
               </View>
             ) : (
-              <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={true}>
-                <Text style={styles.attendanceInfo}>
-                  Tap to cycle: Green (Present) → Yellow (Late) → Blue (Justified) → Red (Absent) → None
-                </Text>
-                {athletes.map((athlete) => {
-                  const statusColors = [
-                    { bg: '#dcfce7', text: '#166534', icon: '#16a34a' }, // 0: Present - green
-                    { bg: '#fef9c3', text: '#854d0e', icon: '#ca8a04' }, // 1: Late - yellow
-                    { bg: '#dbeafe', text: '#1e3a8a', icon: '#3b82f6' }, // 2: Justified - blue
-                    { bg: '#fee2e2', text: '#991b1b', icon: '#dc2626' }  // 3: Absent - red
-                  ]
-                  const statusLabels = ['Present', 'Late', 'Justified', 'Absent']
-                  const currentStatus = athlete.status !== undefined ? statusColors[athlete.status] : null
-                  
-                  return (
-                    <TouchableOpacity
-                      key={athlete.fincode}
-                      style={[
-                        styles.athleteRow,
-                        currentStatus && { backgroundColor: currentStatus.bg }
-                      ]}
-                      onPress={() => toggleAttendance(athlete.fincode)}
-                    >
-                      <MaterialCommunityIcons
-                        name="circle"
-                        size={24}
-                        color={currentStatus?.icon || '#cbd5e1'}
-                      />
-                      <View style={styles.athleteInfo}>
-                        <Text style={[
-                          styles.athleteName,
-                          currentStatus && { color: currentStatus.text }
-                        ]}>
-                          {athlete.lastname}, {athlete.firstname}
-                        </Text>
-                        {athlete.status !== undefined && (
+              <>
+                <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={true}>
+                  {athletes.map((athlete) => {
+                    const statusColors = [
+                      { bg: '#dcfce7', text: '#166534', icon: '#16a34a' }, // 0: Present - green
+                      { bg: '#fef9c3', text: '#854d0e', icon: '#ca8a04' }, // 1: Late - yellow
+                      { bg: '#dbeafe', text: '#1e3a8a', icon: '#3b82f6' }, // 2: Justified - blue
+                      { bg: '#fee2e2', text: '#991b1b', icon: '#dc2626' }  // 3: Absent - red
+                    ]
+                    const statusLabels = ['Present', 'Late', 'Justified', 'Absent']
+                    const currentStatus = athlete.status !== undefined ? statusColors[athlete.status] : null
+                    
+                    return (
+                      <TouchableOpacity
+                        key={athlete.fincode}
+                        style={[
+                          styles.athleteRow,
+                          currentStatus && { backgroundColor: currentStatus.bg }
+                        ]}
+                        onPress={() => toggleAttendance(athlete.fincode)}
+                      >
+                        <MaterialCommunityIcons
+                          name="circle"
+                          size={24}
+                          color={currentStatus?.icon || '#cbd5e1'}
+                        />
+                        <View style={styles.athleteInfo}>
                           <Text style={[
-                            styles.athleteStatus,
-                            { color: currentStatus?.text }
+                            styles.athleteName,
+                            currentStatus && { color: currentStatus.text }
                           ]}>
-                            {statusLabels[athlete.status]}
+                            {athlete.lastname}, {athlete.firstname}
                           </Text>
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  )
-                })}
-                
-                <TouchableOpacity style={styles.saveButton} onPress={saveAttendance}>
-                  <Text style={styles.saveButtonText}>Save Attendance</Text>
-                </TouchableOpacity>
-              </ScrollView>
+                          {athlete.status !== undefined && (
+                            <Text style={[
+                              styles.athleteStatus,
+                              { color: currentStatus?.text }
+                            ]}>
+                              {statusLabels[athlete.status]}
+                            </Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    )
+                  })}
+                  
+                  <TouchableOpacity style={styles.saveButton} onPress={saveAttendance}>
+                    <Text style={styles.saveButtonText}>Save Attendance</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+                <View style={styles.attendanceFooter}>
+                  <View style={styles.attendanceCounterRow}>
+                    <View style={[styles.attendanceBadge, styles.attendanceBadgePresent]}>
+                      <Text style={styles.attendanceBadgeText}>P {attendanceCounts.present}</Text>
+                    </View>
+                    <View style={[styles.attendanceBadge, styles.attendanceBadgeLate]}>
+                      <Text style={styles.attendanceBadgeText}>L {attendanceCounts.late}</Text>
+                    </View>
+                    <View style={[styles.attendanceBadge, styles.attendanceBadgeJustified]}>
+                      <Text style={styles.attendanceBadgeText}>J {attendanceCounts.justified}</Text>
+                    </View>
+                    <View style={[styles.attendanceBadge, styles.attendanceBadgeAbsent]}>
+                      <Text style={styles.attendanceBadgeText}>A {attendanceCounts.absent}</Text>
+                    </View>
+                  </View>
+                </View>
+              </>
             )}
           </View>
         </View>
@@ -970,7 +1006,7 @@ const styles = StyleSheet.create({
   modalContent: {
     backgroundColor: '#fff',
     borderRadius: 20,
-    maxHeight: '80%',
+    maxHeight: '88%',
     width: '100%',
   },
   modalHeader: {
@@ -1219,8 +1255,43 @@ const styles = StyleSheet.create({
   attendanceInfo: {
     fontSize: 14,
     color: '#64748b',
-    marginBottom: 16,
     textAlign: 'center',
+  },
+  attendanceCounterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  attendanceBadge: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  attendanceBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  attendanceBadgePresent: {
+    backgroundColor: '#dcfce7',
+  },
+  attendanceBadgeLate: {
+    backgroundColor: '#fef9c3',
+  },
+  attendanceBadgeJustified: {
+    backgroundColor: '#dbeafe',
+  },
+  attendanceBadgeAbsent: {
+    backgroundColor: '#fee2e2',
+  },
+  attendanceFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    backgroundColor: '#fff',
   },
   athleteRow: {
     flexDirection: 'row',

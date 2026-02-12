@@ -52,7 +52,14 @@ export function AthletesScreen() {
         .select('id, group_name')
         .order('group_name')
       
-      if (data) setGroups(data)
+      if (data) {
+        setGroups(data)
+
+        if (filterGroup === null) {
+          const defaultGroup = data.find(group => group.group_name === 'ASS')
+          if (defaultGroup) setFilterGroup(defaultGroup.id)
+        }
+      }
     } catch (error) {
       console.error('Error loading groups:', error)
     }

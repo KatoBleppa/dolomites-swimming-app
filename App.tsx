@@ -7,18 +7,9 @@ import { AthletesScreen } from './screens/AthletesScreen'
 import { RacesScreen } from './screens/RacesScreen'
 import { TrainingsScreen } from './screens/TrainingsScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
-import { View, Text, StyleSheet } from 'react-native'
+import { DashboardScreen } from './screens/DashboardScreen'
 
 const Tab = createBottomTabNavigator()
-
-// Placeholder screens for now
-function HomeScreen() {
-  return (
-    <View style={styles.placeholder}>
-      <Text style={styles.placeholderText}>Home Screen</Text>
-    </View>
-  )
-}
 
 export default function App() {
   return (
@@ -35,7 +26,7 @@ export default function App() {
                 iconName = focused ? 'account-group' : 'account-group-outline'
               } else if (route.name === 'Trainings') {
                 iconName = focused ? 'swim' : 'swim'
-              } else if (route.name === 'Races') {
+              } else if (route.name === 'Meets') {
                 iconName = focused ? 'trophy' : 'trophy-outline'
               } else if (route.name === 'Tools') {
                 iconName = focused ? 'chart-line' : 'chart-line-variant'
@@ -56,10 +47,10 @@ export default function App() {
             },
           })}
         >
-          <Tab.Screen name="Home" component={HomeScreen} />
+          <Tab.Screen name="Home" component={DashboardScreen} />
           <Tab.Screen name="Athletes" component={AthletesScreen} />
           <Tab.Screen name="Trainings" component={TrainingsScreen} />
-          <Tab.Screen name="Races" component={RacesScreen} />
+          <Tab.Screen name="Meets" component={RacesScreen} />
           <Tab.Screen 
             name="Tools" 
             component={ToolsScreen}
@@ -72,15 +63,3 @@ export default function App() {
   )
 }
 
-const styles = StyleSheet.create({
-  placeholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-  },
-  placeholderText: {
-    fontSize: 20,
-    color: '#64748b',
-  },
-})
